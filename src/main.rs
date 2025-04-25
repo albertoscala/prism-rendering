@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, thread::sleep, time};
+use std::f32::consts::PI;
 use minifb::{Window, WindowOptions};
 
 const THETA_ITER: f32 = 0.01;
@@ -75,30 +75,32 @@ fn draw(buffer: &mut Vec<u32>, vertex: &Vec<(i32, i32)>, faces: &Vec<Vec<i32>>) 
 }
 
 fn main() {
+    // Angle of view for the prism
     let mut theta = 0.0;
 
+    // Initial prism points
     let mut prism = vec![
         vec![
             vec![-1.0],
-            vec![0.0],
+            vec![-1.0],
             vec![-1.0],
             vec![1.0],
         ],
         vec![
             vec![1.0],
-            vec![0.0],
+            vec![-1.0],
             vec![-1.0],
             vec![1.0],
         ],
         vec![
             vec![1.0],
-            vec![0.0],
+            vec![-1.0],
             vec![1.0],
             vec![1.0],
         ],
         vec![
             vec![-1.0],
-            vec![0.0],
+            vec![-1.0],
             vec![1.0],
             vec![1.0],
         ],
@@ -110,28 +112,16 @@ fn main() {
         ]
     ];
 
+    // Storing initial position of the prism
     let prism_original = prism.clone();
 
+    // Faces of the prism, stored as collection of point's index in the prism
     let faces = vec![
         vec![0, 1, 2, 3],   // bottom   face
         vec![0, 1, 4],      // back     face
         vec![1, 2, 4],      // right    face
         vec![2, 3, 4],      // front    face
         vec![3, 0, 4]       // left     face
-    ];
-
-    let to_origin = vec![
-        vec![1.0, 0.0, 0.0, 0.0],
-        vec![0.0, 1.0, 0.0, -1.0],
-        vec![0.0, 0.0, 1.0, 0.0],
-        vec![0.0, 0.0, 0.0, 1.0],
-    ];
-
-    let back_to_position = vec![
-        vec![1.0, 0.0, 0.0, 0.0],
-        vec![0.0, 1.0, 0.0, 1.0],
-        vec![0.0, 0.0, 1.0, 0.0],
-        vec![0.0, 0.0, 0.0, 1.0],
     ];
 
     // Setting up the values for the perspective matrix
@@ -141,6 +131,7 @@ fn main() {
     let far:    f32 = 100.0;
     let f:      f32 = 1.0 / (fov / 2.0).tan();
 
+    // Setting up the matrix that will introduce depth
     let perspective = vec![
         vec![f/aspect,  0.0,    0.0,                            0.0],
         vec![0.0,       f,      0.0,                            0.0],
@@ -164,14 +155,14 @@ fn main() {
         panic!("Some error occured: {e}");
     });
 
-    loop {
+    while window.is_open() {
         // Transformation
-        println!("Stating transformations...");
-
         prism = prism_original.clone(); // restore the original every frame
 
+        // Increment angle
         theta += THETA_ITER;
 
+        // Get the new rotation
         let rotation = vec![
             vec![theta.cos(),   0.0,    theta.sin(),    0.0],
             vec![0.0,           1.0,    0.0,            0.0],
@@ -179,21 +170,18 @@ fn main() {
             vec![0.0,           0.0,    0.0,            1.0],
         ];
 
+        // Apply transformation to all the points
         for i in 0..prism.len() {
-            let step1 = dot_product(&to_origin, &prism[i]);
-            let step2 = dot_product(&rotation, &step1);
-            let step3 = dot_product(&back_to_position, &step2);
-            
-            prism[i] = step3;
+            prism[i] = dot_product(&rotation, &prism[i]);
             prism[i][2][0] -= 5.0;  // Move point back by 5 units in Z
         }
 
         // Perspective
-        println!("Stating perspective...");
 
         // Clean previous points
         prism_perspected.clear();
 
+        // Apply perspective to each vertex
         for i in 0..prism.len() {
             let mut temp = dot_product(&perspective, &prism[i]);
             
@@ -210,11 +198,11 @@ fn main() {
         }
 
         // Conversion to screen
-        println!("Stating conversion to screen...");
 
         // Clean previous points
         prism_screen.clear();
 
+        // Find the position of the vertex in the 2D window
         for i in 0..prism_perspected.len() {
             prism_screen.push(
                 (
@@ -225,24 +213,13 @@ fn main() {
         }
 
         // Drawing
-        println!("Stating to draw...");
-
-        // Draw frame
         draw(&mut buffer, &prism_screen, &faces);
-
-        // Displaying
-        println!("Displaying...");
 
         // Update window
         window
             .update_with_buffer(&buffer, WIDTH, HEIGHT)
             .unwrap();
 
-        // Transformation
-        println!("Stating transformations...");
-
     }
-
-    // sleep(time::Duration::from_secs(5));
 
 }
