@@ -1,7 +1,7 @@
 use std::{f32::consts::PI, thread::sleep, time};
 use minifb::{Window, WindowOptions};
 
-const THETA: f32 = 0.05;
+const THETA_ITER: f32 = 0.01;
 
 const WIDTH: usize = 600;
 const HEIGHT: usize = 600;
@@ -75,6 +75,8 @@ fn draw(buffer: &mut Vec<u32>, vertex: &Vec<(i32, i32)>, faces: &Vec<Vec<i32>>) 
 }
 
 fn main() {
+    let mut theta = 0.0;
+
     let mut prism = vec![
         vec![
             vec![-1.0],
@@ -108,6 +110,8 @@ fn main() {
         ]
     ];
 
+    let prism_original = prism.clone();
+
     let faces = vec![
         vec![0, 1, 2, 3],   // bottom   face
         vec![0, 1, 4],      // back     face
@@ -116,20 +120,19 @@ fn main() {
         vec![3, 0, 4]       // left     face
     ];
 
-    let rotation = vec![
-        vec![THETA.cos(),   0.0,    THETA.sin(),    0.0],
-        vec![0.0,           1.0,    0.0,            0.0],
-        vec![-THETA.sin(),  0.0,    THETA.cos(),    0.0],
-        vec![0.0,           0.0,    0.0,            1.0],
+    let to_origin = vec![
+        vec![1.0, 0.0, 0.0, 0.0],
+        vec![0.0, 1.0, 0.0, -1.0],
+        vec![0.0, 0.0, 1.0, 0.0],
+        vec![0.0, 0.0, 0.0, 1.0],
     ];
 
-    // Transformation
-    println!("Stating transformations...");
-
-    for i in 0..prism.len() {
-        prism[i] = dot_product(&rotation, &prism[i]);
-        prism[i][2][0] -= 5.0;  // Move point back by 5 units in Z
-    }
+    let back_to_position = vec![
+        vec![1.0, 0.0, 0.0, 0.0],
+        vec![0.0, 1.0, 0.0, 1.0],
+        vec![0.0, 0.0, 1.0, 0.0],
+        vec![0.0, 0.0, 0.0, 1.0],
+    ];
 
     // Setting up the values for the perspective matrix
     let fov:    f32 = PI / 2.0;
@@ -147,37 +150,7 @@ fn main() {
 
     let mut prism_perspected: Vec<Vec<Vec<f32>>> = Vec::new();
 
-    // Perspective
-    println!("Stating perspective...");
-
-    for i in 0..prism.len() {
-        let mut temp = dot_product(&perspective, &prism[i]);
-        
-        // Fixing point in NDC
-        temp[0][0] = temp[0][0] / temp[3][0]; // x
-        temp[1][0] = temp[1][0] / temp[3][0]; // y
-        temp[2][0] = temp[2][0] / temp[3][0]; // z
-        
-        // Drop the last element (useless)
-        temp.remove(3);
-
-        // prism_perspected only 3d coordinates
-        prism_perspected.push(temp);
-    }
-
     let mut prism_screen: Vec<(i32, i32)> = Vec::new();
-
-    // Conversion to screen
-    println!("Stating conversion to screen...");
-
-    for i in 0..prism_perspected.len() {
-        prism_screen.push(
-            (
-                ((prism_perspected[i][0][0] + 1.0) * 0.5 * (WIDTH as f32)).floor() as i32,
-                ((1.0 - prism_perspected[i][1][0]) * 0.5 * (WIDTH as f32)).floor() as i32
-            )
-        );
-    }
 
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
 
@@ -190,14 +163,73 @@ fn main() {
     .unwrap_or_else(|e| {
         panic!("Some error occured: {e}");
     });
-    
-    // Drawing
-    println!("Stating to draw...");
-
-    // Draw frame
-    draw(&mut buffer, &prism_screen, &faces);
 
     loop {
+        // Transformation
+        println!("Stating transformations...");
+
+        prism = prism_original.clone(); // restore the original every frame
+
+        theta += THETA_ITER;
+
+        let rotation = vec![
+            vec![theta.cos(),   0.0,    theta.sin(),    0.0],
+            vec![0.0,           1.0,    0.0,            0.0],
+            vec![-theta.sin(),  0.0,    theta.cos(),    0.0],
+            vec![0.0,           0.0,    0.0,            1.0],
+        ];
+
+        for i in 0..prism.len() {
+            let step1 = dot_product(&to_origin, &prism[i]);
+            let step2 = dot_product(&rotation, &step1);
+            let step3 = dot_product(&back_to_position, &step2);
+            
+            prism[i] = step3;
+            prism[i][2][0] -= 5.0;  // Move point back by 5 units in Z
+        }
+
+        // Perspective
+        println!("Stating perspective...");
+
+        // Clean previous points
+        prism_perspected.clear();
+
+        for i in 0..prism.len() {
+            let mut temp = dot_product(&perspective, &prism[i]);
+            
+            // Fixing point in NDC
+            temp[0][0] = temp[0][0] / temp[3][0]; // x
+            temp[1][0] = temp[1][0] / temp[3][0]; // y
+            temp[2][0] = temp[2][0] / temp[3][0]; // z
+            
+            // Drop the last element (useless)
+            temp.remove(3);
+
+            // prism_perspected only 3d coordinates
+            prism_perspected.push(temp);
+        }
+
+        // Conversion to screen
+        println!("Stating conversion to screen...");
+
+        // Clean previous points
+        prism_screen.clear();
+
+        for i in 0..prism_perspected.len() {
+            prism_screen.push(
+                (
+                    ((prism_perspected[i][0][0] + 1.0) * 0.5 * (WIDTH as f32)).floor() as i32,
+                    ((1.0 - prism_perspected[i][1][0]) * 0.5 * (WIDTH as f32)).floor() as i32
+                )
+            );
+        }
+
+        // Drawing
+        println!("Stating to draw...");
+
+        // Draw frame
+        draw(&mut buffer, &prism_screen, &faces);
+
         // Displaying
         println!("Displaying...");
 
@@ -205,6 +237,10 @@ fn main() {
         window
             .update_with_buffer(&buffer, WIDTH, HEIGHT)
             .unwrap();
+
+        // Transformation
+        println!("Stating transformations...");
+
     }
 
     // sleep(time::Duration::from_secs(5));
